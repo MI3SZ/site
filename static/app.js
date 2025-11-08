@@ -226,7 +226,6 @@ const setupPayButtonListener = () => {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        // SUCESSO! (Checkout melhorado)
         summaryEl.style.color = "var(--ok)";
         setInfo(summaryEl, 
           `Pagamento APROVADO!\n` +

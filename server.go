@@ -182,7 +182,7 @@ func CheckoutHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// --- Função Principal e Setup de Rotas ---
+//Função Principal e Setup de Rotas
 
 func main() {
 	staticDir := "./static"
@@ -193,8 +193,6 @@ func main() {
 	http.HandleFunc("/api/checkout", CheckoutHandler)
 
 	const port = ":8080"
-	log.Printf("🚀 Servidor iniciado em http://localhost%s", port)
-	log.Printf("Servindo arquivos estáticos de %s", staticDir)
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("Erro ao iniciar o servidor: %v", err)
 	}
