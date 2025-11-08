@@ -1,4 +1,12 @@
-:root{--bg:#0f1720;--card:#0b1220;--accent:#0ea5a4;--muted:#94a3b8;--ok:#10b981;--bad:#ef4444}
+:root{
+  --bg:#0f1720;
+  --card:#0b1220;
+  --accent:#0ea5a4;
+  --muted:#94a3b8;
+  --ok:#10b981;
+  --bad:#ef4444
+}
+
 *{box-sizing:border-box}
 body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:#f6f8fb;color:#0b1220;margin:0;padding:28px}
 .container{max-width:720px;margin:0 auto;gap:18px;display:flex;flex-direction:column}
