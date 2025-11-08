@@ -97,7 +97,7 @@ func FetchAddressFromViaCEP(cep string) (Address, error) {
 	return address, nil
 }
 
-// --- Handlers ---
+// Handlers
 
 // NOVO HANDLER: /api/lookup-cep
 // Este handler é usado para a validação em tempo real no frontend.

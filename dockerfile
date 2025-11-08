@@ -1,4 +1,4 @@
-# Etapa de build
+# Build do server
 FROM golang:1.25 AS builder
 WORKDIR /app
 
