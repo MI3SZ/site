@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -77,10 +75,8 @@ func luhnCheck(card string) bool {
 	if len(digits) < 12 {
 		return false
 	}
-
 	sum := 0
 	alt := false
-	// percorre da direita para a esquerda
 	for i := len(digits) - 1; i >= 0; i-- {
 		d := int(digits[i] - '0')
 		if alt {
@@ -92,7 +88,6 @@ func luhnCheck(card string) bool {
 		sum += d
 		alt = !alt
 	}
-
 	return sum%10 == 0
 }
 
@@ -104,45 +99,12 @@ func extractBin(card string, length int) string {
 	return digits[:length]
 }
 
-func queryHandy(apiURL, apiKey, bin string, timeout time.Duration) (map[string]interface{}, error) {
-	client := &http.Client{Timeout: timeout}
-	u := strings.ReplaceAll(apiURL, "{bin}", bin)
-	req, err := http.NewRequest("GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	if apiKey != "" {
-		req.Header.Set("x-api-key", apiKey)
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "GoHandyLookup/1.0")
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
-	if res.StatusCode != 200 {
-		return map[string]interface{}{
-			"status":  res.StatusCode,
-			"message": strings.TrimSpace(string(body)),
-		}, nil
-	}
-	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
 func viaCepLookup(cep string) (map[string]interface{}, error) {
-	cepClean := strings.TrimSpace(cep)
-	cepClean = reNonDigit.ReplaceAllString(cepClean, "")
+	cepClean := reNonDigit.ReplaceAllString(strings.TrimSpace(cep), "")
 	if cepClean == "" {
 		return nil, fmt.Errorf("cep vazio")
 	}
-	u := fmt.Sprintf("https://viacep.com.br/ws/%s/json/", cepClean)
-	res, err := http.Get(u)
+	res, err := http.Get(fmt.Sprintf("https://viacep.com.br/ws/%s/json/", cepClean))
 	if err != nil {
 		return nil, err
 	}
@@ -159,20 +121,16 @@ func viaCepLookup(cep string) (map[string]interface{}, error) {
 			return nil, fmt.Errorf("cep não encontrado")
 		}
 	}
-	mapped := map[string]interface{}{
+	return map[string]interface{}{
 		"street":       firstString(data["logradouro"]),
 		"neighborhood": firstString(data["bairro"]),
 		"city":         firstString(data["localidade"]),
 		"state":        firstString(data["uf"]),
 		"cep":          firstString(data["cep"]),
-	}
-	return mapped, nil
+	}, nil
 }
 
 func firstString(v interface{}) string {
-	if v == nil {
-		return ""
-	}
 	if s, ok := v.(string); ok {
 		return s
 	}
@@ -189,8 +147,7 @@ func handleValidateCPF(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, Resp{OK: false, Err: "json inválido"})
 		return
 	}
-	raw, _ := m["cpf"].(string)
-	ok, reason := validateCPFLocal(raw)
+	ok, reason := validateCPFLocal(m["cpf"].(string))
 	if !ok {
 		writeJSON(w, http.StatusBadRequest, Resp{OK: false, Err: reason})
 		return
@@ -208,8 +165,7 @@ func handleValidateCEP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, Resp{OK: false, Err: "json inválido"})
 		return
 	}
-	cepRaw, _ := m["cep"].(string)
-	info, err := viaCepLookup(cepRaw)
+	info, err := viaCepLookup(m["cep"].(string))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, Resp{OK: false, Err: err.Error()})
 		return
@@ -217,66 +173,40 @@ func handleValidateCEP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, Resp{OK: true, Info: info})
 }
 
-func handleValidateCard(apiURL, apiKey string, timeout time.Duration) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeJSON(w, http.StatusMethodNotAllowed, Resp{OK: false, Err: "method"})
-			return
-		}
-		var m map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-			writeJSON(w, http.StatusBadRequest, Resp{OK: false, Err: "json inválido"})
-			return
-		}
-		cardRaw, _ := m["card"].(string)
-		card := strings.TrimSpace(cardRaw)
-		if card == "" {
-			writeJSON(w, http.StatusBadRequest, Resp{OK: false, Err: "card vazio"})
-			return
-		}
-
-		valid := luhnCheck(card)
-		bin := extractBin(card, 6)
-		// montar resposta flat (compatível com frontend)
-		respBody := map[string]interface{}{
-			"valid": valid,
-			"bin":   bin,
-		}
-
-		if bin != "" {
-			data, err := queryHandy(apiURL, apiKey, bin, timeout)
-			if err != nil {
-				respBody["bin_info_error"] = err.Error()
-			} else {
-				respBody["bin_info"] = data
-			}
-		}
-
-		// enviar 200 com o JSON plano que o frontend espera
-		writeJSON(w, http.StatusOK, respBody)
+func handleValidateCard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, Resp{OK: false, Err: "method"})
+		return
 	}
+	var m map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		writeJSON(w, http.StatusBadRequest, Resp{OK: false, Err: "json inválido"})
+		return
+	}
+	card := m["card"].(string)
+	valid := luhnCheck(card)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"valid": valid})
+}
+
+func handleCheckout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, Resp{OK: false, Err: "method"})
+		return
+	}
+	writeJSON(w, http.StatusOK, Resp{OK: true, Info: map[string]string{"order_id": fmt.Sprintf("%d", time.Now().Unix())}})
 }
 
 func main() {
-	keyFlag := flag.String("key", "", "")
-	apiURLFlag := flag.String("api-url", "https://data.handyapi.com/bin/{bin}", "")
 	addr := flag.String("addr", ":8080", "")
-	timeoutFlag := flag.Int("timeout", 12, "")
 	staticDir := flag.String("static", "./static", "")
 	flag.Parse()
-	apiKey := ""
-	if *keyFlag != "" {
-		apiKey = *keyFlag
-	} else if hardcodedKey != "HAS-0YTDRHwyBN9gVd2x5rGsm1qKU6" {
-		apiKey = hardcodedKey
-	} else if env := os.Getenv("HANDY_API_KEY"); env != "" {
-		apiKey = env
-	}
-	timeout := time.Duration(*timeoutFlag) * time.Second
+
 	http.Handle("/", http.FileServer(http.Dir(*staticDir)))
 	http.HandleFunc("/api/validate-cpf", handleValidateCPF)
 	http.HandleFunc("/api/validate-cep", handleValidateCEP)
-	http.HandleFunc("/api/validate-card", handleValidateCard(*apiURLFlag, apiKey, timeout))
-	log.Println("listening on", *addr)
+	http.HandleFunc("/api/validate-card", handleValidateCard)
+	http.HandleFunc("/api/checkout", handleCheckout)
+
+	log.Println("Listening on", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }

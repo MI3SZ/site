@@ -1,64 +1,58 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Checkout — Loja Teste</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkout — Loja Teste</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="container">
-    <h1>Finalizar compra</h1>
+<main class="container">
+<h1>Finalizar compra</h1>
 
-    <section class="card">
-      <h2>Dados do comprador</h2>
-      <label>Nome completo
-        <input id="name" type="text" placeholder="Fulano da Silva" />
-      </label>
+<section class="card">
+<h2>Dados do comprador</h2>
+<label>Nome
+<input id="name" type="text" placeholder="Fulano da Silva">
+</label>
 
-      <label>CPF
-        <input id="cpf" type="text" placeholder="000.000.000-00" />
-      </label>
-      <div id="cpfResult" class="info"></div>
+<label>CPF
+<input id="cpf" type="text" placeholder="000.000.000-00">
+</label>
+<div id="cpfResult" class="info"></div>
 
-      <label>CEP
-        <input id="cep" type="text" placeholder="00000-000" />
-      </label>
-      <div id="cepResult" class="info"></div>
+<label>CEP
+<input id="cep" type="text" placeholder="00000-000">
+</label>
+<div id="cepResult" class="info"></div>
 
-      <label>Endereço
-        <input id="street" type="text" placeholder="Rua, número, complemento" />
-      </label>
-    </section>
+<label>Endereço
+<input id="street" type="text" placeholder="Rua, número, complemento">
+</label>
+</section>
 
-    <section class="card">
-      <h2>Pagamento</h2>
-      <label>Número do cartão
-        <input id="cardNumber" type="text" placeholder="4539 5700 0000 0000" />
-      </label>
+<section class="card">
+<h2>Pagamento</h2>
+<label>Cartão
+<input id="cardNumber" type="text" placeholder="0000 0000 0000 0000">
+</label>
 
-      <div class="row">
-        <label class="mini">Validade
-          <input id="exp" type="text" placeholder="MM/YY" />
-        </label>
-        <label class="mini">CVV
-          <input id="cvv" type="text" placeholder="123" />
-        </label>
-      </div>
+<div class="row">
+<label class="mini">Validade<input id="exp" type="text" placeholder="MM/YY"></label>
+<label class="mini">CVV<input id="cvv" type="text" placeholder="123"></label>
+</div>
 
-      <div class="actions">
-        <button id="btnPay" class="primary">Finalizar pedido</button>
-      </div>
+<div class="actions">
+<button id="btnPay" class="primary" disabled>Finalizar pedido</button>
+</div>
+<div id="cardResult" class="output card-info"></div>
+</section>
 
-      <div id="cardResult" class="output card-info"></div>
-    </section>
-
-    <section class="card">
-      <h2>Resumo</h2>
-      <div id="summary" class="summary">Nenhuma ação ainda.</div>
-    </section>
-  </main>
-
-  <script src="app.js"></script>
+<section class="card">
+<h2>Resumo</h2>
+<div id="summary" class="summary">Nenhuma ação ainda.</div>
+</section>
+</main>
+<script src="app.js"></script>
 </body>
 </html>
