@@ -1,30 +1,97 @@
-const CPF_API = "/api/validate-cpf";
-const CEP_API = "/api/validate-cep";
-const CARD_API = "/api/validate-card";
-const CHECKOUT_API = "/api/checkout";
-
+// --- Constantes e Seletores ---
 const el = id => document.getElementById(id);
 const fmt = s => s ? s.replace(/\D/g, "") : "";
+const CEP_LOOKUP_API = "/api/lookup-cep";
+const CHECKOUT_API = "/api/checkout";
 
-function setInfo(targetEl, html) { targetEl.innerHTML = html; }
-function badge(text, ok) {
-  const cl = ok ? 'status-ok' : 'status-fail';
-  return `<span class="status-badge ${cl}">${escapeHtml(text)}</span>`;
-}
-function escapeHtml(str){
-  if(!str) return "";
-  return String(str).replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-}
+// --- Helpers ---
+const setInfo = (targetEl, html, status) => {
+  targetEl.innerHTML = html;
+  targetEl.className = "info"; // Reseta classes
+  if (status === 'ok') targetEl.classList.add('status-ok-text');
+  if (status === 'fail') targetEl.classList.add('status-fail-text');
+};
 
-function makeFieldValidator(validateFn, delay = 700) {
+// --- Estado do Formulário ---
+// Usamos isso para rastrear a validade de cada campo
+const formState = {
+  name: false,
+  cpf: false,
+  cep: false,
+  card: false,
+  exp: false,
+  cvv: false,
+};
+
+// --- Funções de Máscara ---
+const maskCPF = v => v.replace(/\D/g, "").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})/, "$1-$2").replace(/(-\d{2})\d+?$/, "$1");
+const maskCEP = v => v.replace(/\D/g, "").replace(/^(\d{5})(\d)/, "$1-$2").replace(/(-\d{3})\d+?$/, "$1");
+const maskCard = v => v.replace(/\D/g, "").replace(/(\d{4})/g, "$1 ").trim();
+const maskExp = v => v.replace(/\D/g, "").replace(/(\d{2})(\d)/, "$1/$2").replace(/(\/\d{2})\d+?$/, "$1");
+
+// --- Funções de Validação LOCAL ---
+const localValidators = {
+  cpf: (cpf) => {
+    cpf = fmt(cpf);
+    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+    let sum = 0, r;
+    for (let i = 1; i <= 9; i++) sum += parseInt(cpf.substring(i - 1, i)) * (11 - i);
+    r = (sum * 10) % 11;
+    if (r === 10 || r === 11) r = 0;
+    if (r !== parseInt(cpf.substring(9, 10))) return false;
+    sum = 0;
+    for (let i = 1; i <= 10; i++) sum += parseInt(cpf.substring(i - 1, i)) * (12 - i);
+    r = (sum * 10) % 11;
+    if (r === 10 || r === 11) r = 0;
+    return r === parseInt(cpf.substring(10, 11));
+  },
+  card: (card) => {
+    const digits = fmt(card);
+    if (digits.length < 13 || digits.length > 19) return false;
+    let sum = 0, alt = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+      let d = parseInt(digits[i], 10);
+      if (alt) { d *= 2; if (d > 9) d -= 9; }
+      sum += d; alt = !alt;
+    }
+    return sum % 10 === 0;
+  },
+  exp: (exp) => {
+    const [month, year] = exp.split('/');
+    if (!month || !year || year.length !== 2) return false;
+    const expMonth = parseInt(month, 10);
+    const expYear = parseInt(`20${year}`, 10);
+    if (expMonth < 1 || expMonth > 12) return false;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    return expYear > currentYear || (expYear === currentYear && expMonth >= currentMonth);
+  },
+};
+
+// NOVO: Função para pegar a bandeira do cartão (lógica do frontend)
+const getCardBrand = (digits) => {
+  if (digits.startsWith("4")) return "Visa";
+  if (/^(5[1-5])/.test(digits)) return "Mastercard";
+  if (/^(50|56|57|58)/.test(digits)) return "Elo";
+  if (/^(34|37)/.test(digits)) return "American Express";
+  if (/^(6)/.test(digits)) return "Discover";
+  return "Desconhecida";
+};
+
+// --- Função para Checar o Formulário e Habilitar o Botão ---
+const checkFormValidity = () => {
+  const allValid = Object.values(formState).every(v => v === true);
+  el("btnPay").disabled = !allValid;
+};
+
+// --- Validador de API (com delay) ---
+const makeDebouncedValidator = (validateFn, delay = 600) => {
   let timer = null;
   let controller = null;
-  return function(value) {
+  return (value) => {
     if (timer) clearTimeout(timer);
-    if (controller) {
-      try { controller.abort(); } catch(e) {}
-      controller = null;
-    }
+    if (controller) controller.abort();
     if (!value || String(value).trim() === "") return;
     validateFn.pending && validateFn.pending();
     timer = setTimeout(() => {
@@ -32,133 +99,160 @@ function makeFieldValidator(validateFn, delay = 700) {
       validateFn(value, controller.signal).finally(() => { controller = null; });
     }, delay);
   };
-}
+};
 
-function luhnOk(card) {
-  const digits = fmt(card);
-  if (digits.length < 12) return false;
-  let sum = 0, alt = false;
-  for (let i = digits.length - 1; i >= 0; i--) {
-    let d = parseInt(digits[i], 10);
-    if (alt) { d *= 2; if (d > 9) d -= 9; }
-    sum += d; alt = !alt;
+// NOVO: Função de validação de CEP (assíncrona)
+const validateCEP_API = async (cep, signal) => {
+  const cleanCEP = fmt(cep);
+  if (cleanCEP.length !== 8) {
+    setInfo(el("cepResult"), "CEP deve ter 8 dígitos", "fail");
+    formState.cep = false;
+    checkFormValidity();
+    return;
   }
-  return sum % 10 === 0;
-}
-
-// --- validation functions ---
-async function validateCPFBackend(raw, signal) {
-  const outEl = el("cpfResult");
+  
+  setInfo(el("cepResult"), "Buscando CEP...", "");
+  
   try {
-    const res = await fetch(CPF_API, {
+    const res = await fetch(CEP_LOOKUP_API, {
       method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({cpf: raw}),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cep: cleanCEP }),
       signal
     });
-    const j = await res.json();
-    if (res.ok && j.ok) setInfo(outEl, `<span style="color:var(--ok);font-weight:700">CPF válido</span>`);
-    else setInfo(outEl, `<span style="color:var(--bad);font-weight:700">${escapeHtml(j.error||"CPF inválido")}</span>`);
-  } catch (err) {
-    if (err.name==='AbortError') return;
-    setInfo(outEl, `<span style="color:var(--bad);">Erro ao validar CPF</span>`);
-    console.error("CPF validate error:", err);
-  }
-}
-
-async function validateCEPBackend(raw, signal) {
-  const outEl = el("cepResult");
-  try {
-    const res = await fetch(CEP_API, {
-      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({cep:raw}), signal
-    });
-    const j = await res.json();
-    if(res.ok && j.ok){
-      const info=j.info||{};
-      el("street").value=info.street||el("street").value||"";
-      setInfo(outEl, `${escapeHtml(info.city||"-")} ${escapeHtml(info.state||"")}`);
+    
+    const data = await res.json();
+    
+    if (!res.ok) {
+      // Pega o erro do backend (ex: "CEP não encontrado")
+      setInfo(el("cepResult"), data.error || "Erro ao buscar CEP", "fail");
+      formState.cep = false;
     } else {
-      setInfo(outEl, `<span style="color:var(--bad);font-weight:700">${escapeHtml(j.error||"CEP inválido")}</span>`);
+      // SUCESSO: Mostra rua, bairro e cidade
+      setInfo(el("cepResult"), 
+        `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`, 
+        "ok"
+      );
+      formState.cep = true;
     }
-  } catch(e) {
-    if(e.name==='AbortError') return;
-    setInfo(outEl, `<span style="color:var(--bad);">Erro ao consultar CEP</span>`);
-    console.error("CEP validate error:", e);
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      setInfo(el("cepResult"), "Erro na conexão", "fail");
+      formState.cep = false;
+    }
   }
-}
+  checkFormValidity();
+};
 
-async function validateCardBackend(raw, signal) {
-  const outEl = el("cardResult");
-  const localOk = luhnOk(raw);
-  let localHtml = `<div class="row-field"><div class="label">BIN</div><div class="value">—</div></div>`;
-  localHtml += `<div class="row-field"><div class="label">Validação local (Luhn)</div><div class="value">${localOk?badge("OK",true):badge("INVÁLIDO",false)}</div></div>`;
-  setInfo(outEl, localHtml);
+// Cria o validador com delay
+const debouncedCEPValidator = makeDebouncedValidator(validateCEP_API);
 
-  try {
-    const res = await fetch(CARD_API, {
-      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({card:raw}), signal
-    });
-    const j = await res.json();
-    const info=j.bin_info||j||{};
-    const issuer=info.Issuer||info.IssuerName||info.bank?.name||info.bank||"-";
-    const status=info.Status||info.status||"-";
-    const type=info.Type||info.type||"-";
-    const scheme=info.Scheme||info.scheme||info.Brand||"-";
-    const tier=info.CardTier||info.brand||info.level||info.Brand||"-";
-    const valid=j.valid===true||info.Luhn===true||localOk===true;
-    const statusClass = valid?'status-ok':'status-fail';
-    const html=`
-      <div class="row-field"><div class="label">BIN</div><div class="value">${escapeHtml(j.bin||"-")}</div></div>
-      <div class="row-field"><div class="label">Issuer</div><div class="value">${escapeHtml(issuer)}</div></div>
-      <div class="row-field"><div class="label">Status</div><div class="value"><span class="status-badge ${statusClass}">${escapeHtml(status)}</span></div></div>
-      <div class="row-field"><div class="label">Tipo</div><div class="value">${escapeHtml(type)}</div></div>
-      <div class="row-field"><div class="label">Bandeira</div><div class="value">${escapeHtml(scheme)}</div></div>
-      <div class="row-field"><div class="label">Nível</div><div class="value">${escapeHtml(tier)}</div></div>
-      <div class="small-muted">Resultado instantâneo após digitação.</div>
-    `;
-    setInfo(outEl, html);
-  } catch(e) {
-    if(e.name==='AbortError') return;
-    setInfo(outEl, `<div class="row-field"><div class="label">Validação local</div><div class="value">${localOk?badge("OK",true):badge("INVÁLIDO",false)}</div></div><div style="color:#ef4444;margin-top:8px">Erro ao consultar BIN</div>`);
-    console.error("Card validate error:", e);
-  }
-}
+// --- Listeners de Validação e Máscara ---
+const setupInputListeners = () => {
+  el("name").addEventListener("input", e => {
+    formState.name = e.target.value.trim().length > 2;
+    checkFormValidity();
+  });
 
-// --- attach debounced validators ---
-const cpfField = el("cpf");
-const cepField = el("cep");
-const cardField = el("cardNumber");
+  el("cpf").addEventListener("input", e => {
+    e.target.value = maskCPF(e.target.value);
+    const isValid = localValidators.cpf(e.target.value);
+    formState.cpf = isValid;
+    if (fmt(e.target.value).length === 11) {
+      // Pedido: Remover "(local)"
+      setInfo(el("cpfResult"), isValid ? "CPF válido" : "CPF inválido", isValid ? 'ok' : 'fail');
+    } else {
+      setInfo(el("cpfResult"), "Digite 11 dígitos", "");
+    }
+    checkFormValidity();
+  });
 
-const cpfValidator = makeFieldValidator(async (val,signal)=>{ setInfo(el("cpfResult"),"Validando..."); await validateCPFBackend(val,signal); },700);
-const cepValidator = makeFieldValidator(async (val,signal)=>{ setInfo(el("cepResult"),"Buscando..."); await validateCEPBackend(val,signal); },700);
-const cardValidator = makeFieldValidator(async (val,signal)=>{ setInfo(el("cardResult"),"Validando cartão..."); await validateCardBackend(val,signal); },600);
+  el("cep").addEventListener("input", e => {
+    e.target.value = maskCEP(e.target.value);
+    // Chama o validador com delay
+    debouncedCEPValidator(e.target.value);
+  });
 
-function attachAutoValidate(fieldEl, validator) {
-  if(!fieldEl) return;
-  fieldEl.addEventListener("blur", ()=>{ validator(fieldEl.value); });
-  fieldEl.addEventListener("input", ()=>{ validator(fieldEl.value); });
-}
+  el("cardNumber").addEventListener("input", e => {
+    e.target.value = maskCard(e.target.value);
+    const isValid = localValidators.card(e.target.value);
+    const brand = getCardBrand(fmt(e.target.value));
+    formState.card = isValid;
+    
+    let infoText = `Bandeira: ${brand}`;
+    if (e.target.value.length > 15) { // Só valida o Luhn perto do fim
+      // Pedido: Remover "(Luhn)" e mostrar bandeira
+      infoText += isValid ? " - Cartão válido" : " - Cartão inválido";
+    }
+    setInfo(el("cardResult"), infoText, isValid ? 'ok' : 'fail');
+    checkFormValidity();
+  });
 
-attachAutoValidate(cpfField, cpfValidator);
-attachAutoValidate(cepField, cepValidator);
-attachAutoValidate(cardField, cardValidator);
+  el("exp").addEventListener("input", e => {
+    e.target.value = maskExp(e.target.value);
+    formState.exp = localValidators.exp(e.target.value);
+    checkFormValidity();
+  });
+  
+  el("cvv").addEventListener("input", e => {
+    formState.cvv = fmt(e.target.value).length >= 3;
+    checkFormValidity();
+  });
+};
 
-// finalize order
-el("btnPay")?.addEventListener("click", async ()=>{
-  const payload = {
-    name: el("name").value.trim(),
-    cpf: el("cpf").value.trim(),
-    cep: el("cep").value.trim(),
-    address: el("street").value.trim(),
-    card: el("cardNumber").value.trim(),
-    exp: el("exp").value.trim(),
-    cvv: el("cvv").value.trim()
-  };
-  setInfo(el("summary"),"Enviando...");
-  try{
-    const r = await fetch(CHECKOUT_API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-    const j = await r.json();
-    if(r.ok) setInfo(el("summary"),`Pedido simulado: APROVADO\nID: ${j.info?.order_id||"-"}`);
-    else setInfo(el("summary"),`Pedido simulado: RECUSADO\n${j.error||"Motivo desconhecido"}`);
-  }catch(e){ setInfo(el("summary"),"Erro ao finalizar pedido"); }
+// --- Listener do Botão de Pagar ---
+const setupPayButtonListener = () => {
+  el("btnPay").addEventListener("click", async () => {
+    const summaryEl = el("summary");
+    summaryEl.style.color = "inherit";
+    setInfo(summaryEl, "Processando pagamento...", "");
+    el("btnPay").disabled = true;
+
+    const payload = {
+      card_holder: el("name").value.trim(),
+      card_number: fmt(el("cardNumber").value),
+      expiration_date: el("exp").value.trim(),
+      cvv: el("cvv").value.trim(),
+      cep: fmt(el("cep").value),
+    };
+
+    try {
+      const res = await fetch(CHECKOUT_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // SUCESSO! (Checkout melhorado)
+        summaryEl.style.color = "var(--ok)";
+        setInfo(summaryEl, 
+          `Pagamento APROVADO!\n` +
+          `ID Pedido: ${data.message.split('ID: ')[1]}\n\n` +
+          `Bandeira: ${data.card_brand}\n` +
+          `Endereço de Entrega:\n` +
+          `${data.address_info.logradouro}, ${data.address_info.bairro}\n` +
+          `${data.address_info.localidade} - ${data.address_info.uf} (CEP: ${data.address_info.cep})`
+        );
+      } else {
+        // FALHA (Ex: "CEP não encontrado")
+        summaryEl.style.color = "var(--bad)";
+        setInfo(summaryEl, `Pagamento RECUSADO:\n${data.message}`);
+        el("btnPay").disabled = false; // Permite tentar de novo
+      }
+
+    } catch (err) {
+      summaryEl.style.color = "var(--bad)";
+      setInfo(summaryEl, "Erro de conexão. Não foi possível finalizar o pedido.");
+      el("btnPay").disabled = false;
+    }
+  });
+};
+
+// --- Inicialização ---
+document.addEventListener("DOMContentLoaded", () => {
+  setupInputListeners();
+  setupPayButtonListener();
 });

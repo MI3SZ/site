@@ -9,56 +9,43 @@
 <body>
   <main class="container">
     <h1>Finalizar compra</h1>
-
     <section class="card">
       <h2>Dados do comprador</h2>
-      <label>Nome completo
+      <label>Nome (como está no cartão)
         <input id="name" type="text" placeholder="Fulano da Silva" />
       </label>
-
       <label>CPF
-        <input id="cpf" type="text" placeholder="000.000.000-00" />
+        <input id="cpf" type="text" placeholder="000.000.000-00" maxlength="14" />
       </label>
       <div id="cpfResult" class="info"></div>
-
       <label>CEP
-        <input id="cep" type="text" placeholder="00000-000" />
+        <input id="cep" type="text" placeholder="00000-000" maxlength="9" />
       </label>
       <div id="cepResult" class="info"></div>
-
-      <label>Endereço
-        <input id="street" type="text" placeholder="Rua, número, complemento" />
-      </label>
     </section>
-
     <section class="card">
       <h2>Pagamento</h2>
       <label>Número do cartão
-        <input id="cardNumber" type="text" placeholder="4539 5700 0000 0000" />
+        <input id="cardNumber" type="text" placeholder="4539 5700 0000 0000" maxlength="19" />
       </label>
-
+      <div id="cardResult" class="info"></div>
       <div class="row">
         <label class="mini">Validade
-          <input id="exp" type="text" placeholder="MM/YY" />
+          <input id="exp" type="text" placeholder="MM/AA" maxlength="5" />
         </label>
         <label class="mini">CVV
-          <input id="cvv" type="text" placeholder="123" />
+          <input id="cvv" type="text" placeholder="123" maxlength="4" />
         </label>
       </div>
-
       <div class="actions">
-        <button id="btnPay" class="primary">Finalizar pedido</button>
+        <button id="btnPay" class="primary" disabled>Finalizar pedido</button>
       </div>
-
-      <div id="cardResult" class="output card-info"></div>
     </section>
-
     <section class="card">
       <h2>Resumo</h2>
-      <div id="summary" class="summary">Nenhuma ação ainda.</div>
+      <div id="summary" class="summary">Preencha os dados para continuar.</div>
     </section>
   </main>
-
   <script src="app.js"></script>
 </body>
 </html>
