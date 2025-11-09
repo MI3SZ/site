@@ -18,11 +18,29 @@
         <input id="cpf" type="text" placeholder="000.000.000-00" maxlength="14" />
       </label>
       <div id="cpfResult" class="info"></div>
+      
       <label>CEP
         <input id="cep" type="text" placeholder="00000-000" maxlength="9" />
       </label>
       <div id="cepResult" class="info"></div>
-    </section>
+      
+      <label>Rua
+        <input id="rua" type="text" disabled placeholder="Rua preenchida automaticamente" />
+      </label>
+      
+      <div class="row">
+          <label class="small">Número
+              <input id="number" type="text" placeholder="123" />
+          </label>
+          <label class="big">Bairro
+              <input id="bairro" type="text" disabled placeholder="Bairro preenchido automaticamente" />
+          </label>
+      </div>
+
+      <label>Cidade / UF
+        <input id="cidade" type="text" disabled placeholder="Cidade - UF" />
+      </label>
+      </section>
     <section class="card">
       <h2>Pagamento</h2>
       <label>Número do cartão
@@ -43,7 +61,7 @@
     </section>
     <section class="card">
       <h2>Resumo</h2>
-      <div id="summary" class="summary">Preencha os dados para continuar.</div>
+      <div id="summary" class="summary">Preencha todos os dados para continuar.</div>
     </section>
   </main>
   <script src="app.js"></script>

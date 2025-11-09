@@ -1,32 +1,35 @@
-# Build do server
-FROM golang:1.25 AS builder
+# ETAPA 1: BUILD (Compilação)
+FROM golang:1.21-alpine AS builder
+
 WORKDIR /app
 
-# Copia o go.mod primeiro
-COPY go.mod ./
+# Copia os arquivos de módulo (go.mod e go.sum são essenciais para o download do /pq)
+COPY go.mod .
+COPY go.sum .
 
-# Baixa dependências (no seu caso só stdlib)
-RUN go mod tidy
+# Baixa as dependências do Go e o driver 'pq'
+RUN go mod download
 
-# Copia todo o restante do projeto
-COPY . .
+# Copia o código fonte
+COPY server.go .
 
-# Build do servidor
-RUN go build -o server server.go
+# Compila a aplicação Go, criando um executável estático chamado 'server'
+RUN CGO_ENABLED=0 go build -o /server server.go
 
-# Etapa de execução
-FROM debian:bookworm-slim
-WORKDIR /app
+# ETAPA 2: PRODUCTION (Ambiente de Execução)
+FROM alpine:latest
 
-# Instala certificados de CA para HTTPS funcionar
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+# Instala certificados CA para que o Go possa fazer requisições HTTPS (ViaCEP)
+RUN apk --no-cache add ca-certificates
 
-# Copia o binário e a pasta static
-COPY --from=builder /app/server .
-COPY --from=builder /app/static ./static
+WORKDIR /root/
 
-# Expõe a porta usada pelo servidor
+# Copia o executável 'server' e os arquivos estáticos
+COPY --from=builder /server .
+COPY static/ ./static
+
+# Expor a porta 8080 (padrão no server.go)
 EXPOSE 8080
 
-# Comando para rodar o servidor
+# Comando para iniciar o servidor
 CMD ["./server"]

@@ -7,17 +7,23 @@ const CHECKOUT_API = "/api/checkout";
 // --- Helpers ---
 const setInfo = (targetEl, html, status) => {
   targetEl.innerHTML = html;
-  targetEl.className = "info"; // Reseta classes
+  targetEl.className = "info"; 
   if (status === 'ok') targetEl.classList.add('status-ok-text');
   if (status === 'fail') targetEl.classList.add('status-fail-text');
 };
 
+const clearAddressFields = () => {
+    el("rua").value = "";
+    el("bairro").value = "";
+    el("cidade").value = "";
+};
+
 // --- Estado do Formulário ---
-// Usamos isso para rastrear a validade de cada campo
 const formState = {
   name: false,
   cpf: false,
   cep: false,
+  number: false, 
   card: false,
   exp: false,
   cvv: false,
@@ -29,11 +35,12 @@ const maskCEP = v => v.replace(/\D/g, "").replace(/^(\d{5})(\d)/, "$1-$2").repla
 const maskCard = v => v.replace(/\D/g, "").replace(/(\d{4})/g, "$1 ").trim();
 const maskExp = v => v.replace(/\D/g, "").replace(/(\d{2})(\d)/, "$1/$2").replace(/(\/\d{2})\d+?$/, "$1");
 
-// --- Funções de Validação LOCAL ---
+// --- Funções de Validação LOCAL (Corrigidas) ---
 const localValidators = {
+  // Validação de CPF completa (algoritmo)
   cpf: (cpf) => {
     cpf = fmt(cpf);
-    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false; 
     let sum = 0, r;
     for (let i = 1; i <= 9; i++) sum += parseInt(cpf.substring(i - 1, i)) * (11 - i);
     r = (sum * 10) % 11;
@@ -45,6 +52,7 @@ const localValidators = {
     if (r === 10 || r === 11) r = 0;
     return r === parseInt(cpf.substring(10, 11));
   },
+  // Validação de Cartão completa (algoritmo Luhn)
   card: (card) => {
     const digits = fmt(card);
     if (digits.length < 13 || digits.length > 19) return false;
@@ -69,7 +77,6 @@ const localValidators = {
   },
 };
 
-// NOVO: Função para pegar a bandeira do cartão (lógica do frontend)
 const getCardBrand = (digits) => {
   if (digits.startsWith("4")) return "Visa";
   if (/^(5[1-5])/.test(digits)) return "Mastercard";
@@ -85,15 +92,18 @@ const checkFormValidity = () => {
   el("btnPay").disabled = !allValid;
 };
 
-// --- Validador de API (com delay) ---
+// --- Validador de CEP Assíncrono ---
 const makeDebouncedValidator = (validateFn, delay = 600) => {
   let timer = null;
   let controller = null;
   return (value) => {
     if (timer) clearTimeout(timer);
     if (controller) controller.abort();
-    if (!value || String(value).trim() === "") return;
-    validateFn.pending && validateFn.pending();
+    if (!value || String(value).trim() === "") {
+        clearAddressFields();
+        return;
+    }
+    
     timer = setTimeout(() => {
       controller = new AbortController();
       validateFn(value, controller.signal).finally(() => { controller = null; });
@@ -101,9 +111,10 @@ const makeDebouncedValidator = (validateFn, delay = 600) => {
   };
 };
 
-// NOVO: Função de validação de CEP (assíncrona)
 const validateCEP_API = async (cep, signal) => {
   const cleanCEP = fmt(cep);
+  clearAddressFields();
+  
   if (cleanCEP.length !== 8) {
     setInfo(el("cepResult"), "CEP deve ter 8 dígitos", "fail");
     formState.cep = false;
@@ -124,15 +135,15 @@ const validateCEP_API = async (cep, signal) => {
     const data = await res.json();
     
     if (!res.ok) {
-      // Pega o erro do backend (ex: "CEP não encontrado")
       setInfo(el("cepResult"), data.error || "Erro ao buscar CEP", "fail");
       formState.cep = false;
     } else {
-      // SUCESSO: Mostra rua, bairro e cidade
-      setInfo(el("cepResult"), 
-        `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`, 
-        "ok"
-      );
+      // PREENCHE OS CAMPOS SEPARADOS
+      el("rua").value = data.logradouro;
+      el("bairro").value = data.bairro;
+      el("cidade").value = `${data.localidade} - ${data.uf}`;
+      
+      setInfo(el("cepResult"), "CEP encontrado e endereço preenchido.", "ok");
       formState.cep = true;
     }
   } catch (err) {
@@ -144,7 +155,6 @@ const validateCEP_API = async (cep, signal) => {
   checkFormValidity();
 };
 
-// Cria o validador com delay
 const debouncedCEPValidator = makeDebouncedValidator(validateCEP_API);
 
 // --- Listeners de Validação e Máscara ---
@@ -157,34 +167,43 @@ const setupInputListeners = () => {
   el("cpf").addEventListener("input", e => {
     e.target.value = maskCPF(e.target.value);
     const isValid = localValidators.cpf(e.target.value);
-    formState.cpf = isValid;
+    
+    formState.cpf = isValid; 
+    
     if (fmt(e.target.value).length === 11) {
-      // Pedido: Remover "(local)"
-      setInfo(el("cpfResult"), isValid ? "CPF válido" : "CPF inválido", isValid ? 'ok' : 'fail');
+        setInfo(el("cpfResult"), isValid ? "CPF válido" : "CPF inválido pelo algoritmo", isValid ? 'ok' : 'fail');
     } else {
-      setInfo(el("cpfResult"), "Digite 11 dígitos", "");
+        setInfo(el("cpfResult"), "Aguardando 11 dígitos", "");
     }
     checkFormValidity();
   });
 
   el("cep").addEventListener("input", e => {
     e.target.value = maskCEP(e.target.value);
-    // Chama o validador com delay
     debouncedCEPValidator(e.target.value);
+  });
+  
+  el("number").addEventListener("input", e => {
+    formState.number = e.target.value.trim().length > 0;
+    checkFormValidity();
   });
 
   el("cardNumber").addEventListener("input", e => {
     e.target.value = maskCard(e.target.value);
-    const isValid = localValidators.card(e.target.value);
+    const isValidLength = fmt(e.target.value).length >= 13;
+    const isLuhnValid = localValidators.card(e.target.value);
     const brand = getCardBrand(fmt(e.target.value));
-    formState.card = isValid;
+    
+    formState.card = isValidLength && isLuhnValid;
     
     let infoText = `Bandeira: ${brand}`;
-    if (e.target.value.length > 15) { // Só valida o Luhn perto do fim
-      // Pedido: Remover "(Luhn)" e mostrar bandeira
-      infoText += isValid ? " - Cartão válido" : " - Cartão inválido";
+    if (isValidLength) { 
+        infoText += isLuhnValid ? " - Cartão válido (Luhn)" : " - Cartão inválido (Luhn)";
+    } else {
+        infoText += " - Aguardando 13+ dígitos";
     }
-    setInfo(el("cardResult"), infoText, isValid ? 'ok' : 'fail');
+    
+    setInfo(el("cardResult"), infoText, isLuhnValid && isValidLength ? 'ok' : 'fail');
     checkFormValidity();
   });
 
@@ -214,6 +233,7 @@ const setupPayButtonListener = () => {
       expiration_date: el("exp").value.trim(),
       cvv: el("cvv").value.trim(),
       cep: fmt(el("cep").value),
+      number: el("number").value.trim(), 
     };
 
     try {
@@ -228,23 +248,22 @@ const setupPayButtonListener = () => {
       if (res.ok && data.success) {
         summaryEl.style.color = "var(--ok)";
         setInfo(summaryEl, 
-          `Pagamento APROVADO!\n` +
-          `ID Pedido: ${data.message.split('ID: ')[1]}\n\n` +
-          `Bandeira: ${data.card_brand}\n` +
-          `Endereço de Entrega:\n` +
-          `${data.address_info.logradouro}, ${data.address_info.bairro}\n` +
+          `✅ Pagamento APROVADO com sucesso!\n\n` +
+          `${data.message}\n` + 
+          `Bandeira Utilizada: ${data.card_brand}\n\n` +
+          `📦 Endereço Salvo:\n` +
+          `${data.address_info.logradouro}, ${payload.number} - ${data.address_info.bairro}\n` +
           `${data.address_info.localidade} - ${data.address_info.uf} (CEP: ${data.address_info.cep})`
         );
       } else {
-        // FALHA (Ex: "CEP não encontrado")
         summaryEl.style.color = "var(--bad)";
-        setInfo(summaryEl, `Pagamento RECUSADO:\n${data.message}`);
-        el("btnPay").disabled = false; // Permite tentar de novo
+        setInfo(summaryEl, `❌ Pagamento RECUSADO:\n${data.message}`);
+        el("btnPay").disabled = false;
       }
 
     } catch (err) {
       summaryEl.style.color = "var(--bad)";
-      setInfo(summaryEl, "Erro de conexão. Não foi possível finalizar o pedido.");
+      setInfo(summaryEl, "🚨 Erro de conexão. Não foi possível finalizar o pedido.");
       el("btnPay").disabled = false;
     }
   });
@@ -254,4 +273,5 @@ const setupPayButtonListener = () => {
 document.addEventListener("DOMContentLoaded", () => {
   setupInputListeners();
   setupPayButtonListener();
+  checkFormValidity();
 });
