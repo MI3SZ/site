@@ -171,7 +171,7 @@ const setupInputListeners = () => {
     formState.cpf = isValid; 
     
     if (fmt(e.target.value).length === 11) {
-        setInfo(el("cpfResult"), isValid ? "CPF válido" : "CPF inválido pelo algoritmo", isValid ? 'ok' : 'fail');
+        setInfo(el("cpfResult"), isValid ? "CPF válido" : "CPF inválido", isValid ? 'ok' : 'fail');
     } else {
         setInfo(el("cpfResult"), "Aguardando 11 dígitos", "");
     }
@@ -198,7 +198,7 @@ const setupInputListeners = () => {
     
     let infoText = `Bandeira: ${brand}`;
     if (isValidLength) { 
-        infoText += isLuhnValid ? " - Cartão válido (Luhn)" : " - Cartão inválido (Luhn)";
+        infoText += isLuhnValid ? " - Cartão válido" : " - Cartão inválido";
     } else {
         infoText += " - Aguardando 13+ dígitos";
     }

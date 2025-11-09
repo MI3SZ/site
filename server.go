@@ -85,7 +85,7 @@ func FetchAddressFromViaCEP(cep string) (Address, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return Address{}, fmt.Errorf("cep não encontrado")
+		return Address{}, fmt.Errorf("CEP não encontrado")
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -95,11 +95,11 @@ func FetchAddressFromViaCEP(cep string) (Address, error) {
 
 	var address Address
 	if err := json.Unmarshal(body, &address); err != nil {
-		return Address{}, fmt.Errorf("resposta do viacep inválida")
+		return Address{}, fmt.Errorf("CEP não encontrado")
 	}
 
 	if address.ViaCEPError {
-		return Address{}, fmt.Errorf("cep não encontrado")
+		return Address{}, fmt.Errorf("CEP não encontrado")
 	}
 
 	return address, nil
@@ -230,7 +230,7 @@ func main() {
 	if databaseURL == "" {
 		log.Println("Aviso: DATABASE_URL não configurada. Usando string literal para ambiente local.")
 		// ATENÇÃO: Use a string de conexão *completa* do Koyeb aqui
-		databaseURL = "user='checkout-adm' password=******* host=ep-rapid-frost-a4q9al3j.us-east-1.pg.koyeb.app dbname='koyebdb'"
+		databaseURL = "DATABASE_URL não configurada"
 	}
 
 	if databaseURL != "" {
