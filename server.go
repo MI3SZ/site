@@ -228,7 +228,7 @@ func main() {
 
 	// FALLBACK (Use a variável de ambiente no Koyeb!)
 	if databaseURL == "" {
-		log.Println("⚠️ Aviso: DATABASE_URL não configurada no ambiente. Usando string literal.")
+		log.Println("Aviso: DATABASE_URL não configurada no ambiente. Usando string literal.")
 		// ATENÇÃO: COLOQUE A SUA STRING DE CONEXÃO REAL AQUI
 		databaseURL = "user='checkout-adm' password=******* host=ep-rapid-frost-a4q9al3j.us-east-1.pg.koyeb.app dbname='koyebdb'"
 	}
@@ -237,14 +237,14 @@ func main() {
 		var err error
 		db, err = sql.Open("postgres", databaseURL)
 		if err != nil {
-			log.Fatalf("❌ Erro ao abrir a conexão com o DB: %v", err)
+			log.Fatalf("Erro ao abrir a conexão com o DB: %v", err)
 		}
 
 		err = db.Ping()
 		if err != nil {
-			log.Fatalf("❌ Erro ao conectar com o DB: %v", err)
+			log.Fatalf("Erro ao conectar com o DB: %v", err)
 		}
-		log.Println("✅ Conectado ao Banco de Dados com sucesso!")
+		log.Println("Conectado ao Banco de Dados com sucesso!")
 	}
 
 	// 2. Setup de Rotas
@@ -255,7 +255,7 @@ func main() {
 	http.HandleFunc("/api/checkout", CheckoutHandler)
 
 	const port = ":8080"
-	log.Printf("🚀 Servidor iniciado em http://localhost%s", port)
+	log.Printf("Servidor iniciado em http://localhost%s", port)
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("Erro ao iniciar o servidor: %v", err)
 	}
