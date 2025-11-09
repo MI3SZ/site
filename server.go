@@ -7,11 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+	"os" // Necessário para acessar variáveis de ambiente
 	"regexp"
 	"strings"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // Driver PostgreSQL
 )
 
 // Variável global para a conexão com o banco de dados
@@ -184,7 +184,7 @@ func CheckoutHandler(w http.ResponseWriter, r *http.Request) {
 	// --- LÓGICA DE PERSISTÊNCIA (Salvar no DB) ---
 
 	if db == nil {
-		log.Println("⚠️ Checkout falhou: Conexão com o DB não está ativa.")
+		log.Println("Checkout falhou: Conexão com o DB não está ativa.")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(CheckoutResponse{Success: false, Message: "pagamento aprovado, mas erro interno: falha ao registrar o pedido no sistema."})
 		return
@@ -226,25 +226,31 @@ func main() {
 	// 1. Configurar Conexão com o Banco de Dados
 	databaseURL := os.Getenv("DATABASE_URL")
 
-	// FALLBACK (Use a variável de ambiente no Koyeb!)
+	// Fallback para teste local se DATABASE_URL não estiver setada
 	if databaseURL == "" {
-		log.Println("Aviso: DATABASE_URL não configurada no ambiente. Usando string literal.")
-		// ATENÇÃO: COLOQUE A SUA STRING DE CONEXÃO REAL AQUI
+		log.Println("Aviso: DATABASE_URL não configurada. Usando string literal para ambiente local.")
+		// ATENÇÃO: Use a string de conexão *completa* do Koyeb aqui
 		databaseURL = "user='checkout-adm' password=******* host=ep-rapid-frost-a4q9al3j.us-east-1.pg.koyeb.app dbname='koyebdb'"
 	}
 
 	if databaseURL != "" {
 		var err error
+		// sql.Open pode receber a string 'user=... host=...' ou a URI 'postgres://user:pass@host/db'
 		db, err = sql.Open("postgres", databaseURL)
 		if err != nil {
-			log.Fatalf("Erro ao abrir a conexão com o DB: %v", err)
+			// Não use log.Fatalf em produção se o DB for opcional.
+			log.Fatalf("Erro ao abrir a conexão com o DB (Verifique o formato da string/URI): %v", err)
 		}
 
 		err = db.Ping()
 		if err != nil {
-			log.Fatalf("Erro ao conectar com o DB: %v", err)
+			// Este é o erro de credenciais ou DNS que vimos no Koyeb.
+			log.Fatalf("Erro ao conectar com o DB (Verifique o Host, Senha e DNS): %v", err)
 		}
 		log.Println("Conectado ao Banco de Dados com sucesso!")
+	} else {
+		// Se databaseURL estiver vazia (e o fallback for removido), o DB não será usado.
+		log.Println("Aviso: Não há DATABASE_URL configurada. Pedidos não serão salvos no DB.")
 	}
 
 	// 2. Setup de Rotas
